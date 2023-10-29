@@ -1,0 +1,550 @@
+\documentclass[12pt, a4paper]{article}
+\usepackage[OT4]{polski}
+\renewcommand{\contentsname}{\Large {\textbf{SPIS TREŚCI}}}
+\usepackage[colorlinks=true, linkcolor=black]{hyperref}
+\usepackage[top = 2.5cm, bottom = 2.5cm, left = 2.5cm, right = 2.5cm]{geometry}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{float}
+\usepackage{graphicx}
+\usepackage{amssymb}
+
+\renewcommand{\maketitle}
+{\begin{titlepage}
+ \vspace*{0.1cm}
+ \begin{center}
+ \large \textbf{ANALIZA PRZEŻYCIA} \\  
+ \end{center}
+ \vspace*{1.3cm}
+ \begin{center}
+ \huge \textsc{\bf SPRAWOZDANIE}
+ \end{center}
+ \vspace*{1.3cm}
+ \vspace*{0.5cm}
+ \begin{center}\small
+ OPRACOWAŁA: \\ \textbf{ALEKSANDRA GRZESZCZUK} \\ \textbf{NUMER
+ALBUMU: 255707}
+ \end{center} 
+\end{titlepage}}
+
+<<echo = FALSE, eval = TRUE, warning = FALSE, message = FALSE>>=
+library(base)
+library(knitr)
+library(survminer)
+library(reliaR)
+library(xtable)
+opts_chunk$set(fig.path='figure/', fig.align='center', fig.pos='H', fig.width = 7, fig.height = 4)
+@
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+\newpage
+
+\section{\textbf{WSTĘP}}
+
+<<echo = FALSE, eval = TRUE, message=FALSE, warning=FALSE>>=
+library(survival)
+library(tidyverse)
+dane <- lung
+@
+
+<<>>=
+surv_diff <- survdiff(Surv(time, status) ~ sex, data = lung)
+surv_diff
+@
+
+<<>>=
+x <- rnorm (50)
+y <- runif(30)
+ks.test(x, y)
+@
+
+
+
+\noindent
+Wszystkie zadania do sprawozdania oparte są na danych \texttt{lung} z biblioteki \texttt{survival}. Dane te dotyczą pacjentów z zaawansowanym rakiem płuc. Nasz zbiór zawiera:
+
+<<echo = TRUE>>=
+nrow(dane)
+@
+
+\noindent
+informacji o pacjentach, których zbiór charakterystyk obejmuje:
+
+<<echo = TRUE>>=
+ncol(dane)
+@
+
+\noindent
+następujących zmiennych:
+
+\begin{itemize}
+\item \emph{inst} - kod instytucji
+\item \emph{time} - czas przeżycia w dniach
+\item \emph{status} - czy otrzymaliśmy zdarzenie ($2$ - śmierć), czy też nasze dane zostały ocenzurowane ($1$ - cenzura)
+\item \emph{age} - wiek w latach
+\item \emph{sex} - płeć, gdzie $1$ oznacza mężczyznę, zaś $2$ - kobietę
+\item \emph{ph.ecog} - skala sprawności \texttt{ECPG} według lekarza ($0$ oznacza sprawność prawidłową, $5$ - zgon)
+\item \emph{ph.karno} - skala sprawności \texttt{Karnofsky'ego} według lekarzza ($100$ oznacza sprawność prawidłową, $0$ - zgon)
+\item \emph{pat.karno} - skala sprawności \texttt{Karnofsky'ego} według pacjenta
+\item \emph{meal.cal} - kalorie spożywane podczas posiłków
+\item \emph{wt.loss} - utrata masy ciała w ciągu ostatnich sześciu miesięcy
+\end{itemize}
+
+\noindent
+W celu sprawdzenia, ile najczęściej wynosi czas przeżycia pacjentów w dniach (ocenzurowany czy też nie) narysujemy histogram.
+
+<<echo = FALSE, eval = TRUE, fig.cap = "Histogram czasu przeżycia w dniach (zmiennej time)">>=
+time <- dane[,2]
+hist(time, col = "#8DB600", xlab = "Czas przeżycia", ylab = "Ilość osób", main = NULL)
+@
+
+\noindent
+Widzimy, że najczęściej pacjenci przeżywają od $100$ do $300$ dni, czyli nie przeżywają nawet roku. \\
+
+<<echo = FALSE, eval = TRUE>>=
+dane <- mutate(dane, across(c("status", "sex"), as.factor))
+
+dane <- dane %>% mutate(status = fct_recode(status, "Censored" = "1", "Death" = "2")) 
+dane <- dane %>% mutate(sex = fct_recode(sex, "Man" = "1", "Woman" = "2"))
+@
+
+\noindent 
+W celu zilustrowania danych liczbowych i przedstawienia częstości występowania poszczególnych wartości stworzymy tablice liczbości róznych cech. 
+
+<<echo = FALSE, eval = TRUE, results = 'asis'>>=
+# TABLICE LICZNOŚCI DLA KOBIETA/MĘŻCZYZNA I STATUS 
+# dane %>% filter(status == "Censored") %>% count(sex)
+# dane %>% filter(status == "Death") %>% count(sex)
+Płeć <- c("Mężczyzna", "Kobieta")
+Ocenzurowanie <- c("26", "37")
+Śmierć <- c("112", "53")
+Suma <- c("138", "90")
+tabela_1 <- data.frame(c(Płeć), 
+                       c(Ocenzurowanie), 
+                       c(Śmierć),
+                       c(Suma))
+
+colnames(tabela_1) <- paste0(c("Płeć", "Ocenzurowanie", "Śmierć", "Suma osób"))
+tab_1 <- xtable(tabela_1, caption = "Zestawienie danych dla sex i status")
+print(tab_1, type = "latex", table.placement = "H")
+@
+
+\noindent
+Widzimy, że z $90$ kobiet biorących udział w badaniu, aż $41 \%$ danych dotyczących ich przeżycia zostało ocenzurowanych podczas gdy u mężczyzn (ze $138$ w sumie) jest to jedynie $19 \%$. 
+
+<<echo = FALSE, eval = TRUE, results = 'asis'>>=
+# TABLICE LICZNOŚCI DLA KOBIETA/MĘŻCZYZNA I PH.ECOG
+# dane %>% filter(sex == "Woman") %>% count(ph.ecog)
+# dane %>% filter(sex == "Man") %>% count(ph.ecog)
+ph.ecog <- c("0", "1", "2", "3", "4", "5", "NA")
+Mężczyźni <- c("27", "42", "21", "0", "0", "0", "0")
+Kobiety <- c("36", "71", "29", "1", "0", "0", "1")
+tabela_1 <- data.frame(c(ph.ecog), 
+                       c(Mężczyźni), 
+                       c(Kobiety))
+
+colnames(tabela_1) <- paste0(c("ph.ecog", "Liczba mężczyzn", "Liczba kobiet"))
+tab_1 <- xtable(tabela_1, caption = "Zestawienie danych dla sex i ph.ecog")
+print(tab_1, type = "latex", table.placement = "H")
+@
+
+<<echo = FALSE, eval = TRUE, results = 'asis'>>=
+# TABLICE LICZNOŚCI DLA KOBIETA/MĘŻCZYZNA I PH.KARNO
+# dane %>% filter(sex == "Woman") %>% count(ph.karno)
+# dane %>% filter(sex == "Man") %>% count(ph.karno)
+ph.karno <- c("0", "10", "20", "30", "40", "50", "60", "70", "80", "90", "100", "NA")
+Mężczyźni1 <- c("0", "0", "0", "0", "0", "2", "8", "12", "27", "29", "12", "0")
+Kobiety1 <- c("0", "0", "0", "0", "0", "4", "11", "20", "40", "45", "17", "1")
+tabela_1 <- data.frame(c(ph.karno), 
+                       c(Mężczyźni1), 
+                       c(Kobiety1))
+
+colnames(tabela_1) <- paste0(c("ph.karno", "Liczba mężczyzn", "Liczba kobiet"))
+tab_1 <- xtable(tabela_1, caption = "Zestawienie danych dla sex i ph.karno")
+print(tab_1, type = "latex", table.placement = "H")
+@
+
+\noindent
+W powyższych tabelach widzimy, że występują jedynie $2$ brakujące wartości - dla danych \texttt{ph.ecog} oraz \texttt{ph.karno} dla kobiet. 
+
+\section{\textbf{ZADANIE 1A}}
+
+\noindent
+W podpunkcie $A$ zadania $1$ mamy naszkicować estymator Kaplana-Meiera funkcji przeżycia (zmiennej \texttt{time}) w całej badanej grupie oraz w podgrupach ze względu na płeć, bez zaznaczonych realizacji przedziałów ufności. Wykorzystamy w tym celu funkcję \texttt{Surv} z~biblioteki \texttt{survival}, która tworzy obiekt przeżycia, zwykle używany jako zmienna odpowiedzi w formule modelu. \\
+
+\noindent
+Za pomocą funkcji \texttt{survfit} tworzymy prostą krzywą przeżycia estymatora Kaplana-Meiera, która nie uwzględnia żadnych podgrup.
+
+<<echo = TRUE, eval = TRUE>>=
+fit_overall = survfit(Surv(time, status) ~ 1, data = lung,
+                      type = "kaplan-meier")
+summary(fit_overall)
+@
+
+\noindent
+Powyższa funkcja pokazuje nam liczbę obserwacji, liczbę zdarzeń, medianę przeżycia oraz granice ufności dla mediany. Zauważmy, że mediana (czyli wartość środkowa) czasu przeżycia wynosi $310$ dni. \\
+Teraz zaprezentujemy to na wykresie Kaplana-Meiera.
+
+<<echo = TRUE, eval = TRUE, fig.cap = "Estymator KM w całej badanej grupie">>=
+ggsurvplot(fit_overall, xlab = "Czas przeżycia w dniach",
+           ylab = "Prawdopodobieństwo przeżycia", conf.int = FALSE)
+@
+
+\noindent
+Ponownie, za pomocą funkcji \texttt{survfit} tworzymy prostą krzywą przeżycia estymatora Kaplana-Meiera w pogrupie ze względu na płeć. 
+
+<<echo = TRUE, eval = TRUE>>=
+fit_overall1 = survfit(Surv(time, status) ~ sex, data = lung, 
+                       type = "kaplan-meier")
+@
+
+\noindent
+Zauważmy, że mediana przeżycia kobiet prawie o połowę większa, niż mediana przeżycia mężczyzn, mimo, że badanych kobiet jest o $48$ mniej.
+
+<<echo = TRUE, eval = TRUE, fig.cap = "Estymator KM w podgrupach ze względu na płeć">>=
+ggsurvplot(fit_overall1, legend.title = "Płeć", 
+           legend.labs = c("Mężczyzna", "Kobieta"), 
+           xlab = "Czas przeżycia w dniach", 
+           ylab = "Prawdopodobieństwo przeżycia")
+@
+
+\noindent
+Powyższy wykres potwierdza wcześniejsze wnioski. Krzywa niebieska będą estymatorem KM kobiet przez cały okres badania jest ponad czerwoną krzywą estymatora KM mężczyzn. To znaczy, że w całym okresie badania prawdopodobieństwo przeżycia kobiet jest większe. 
+
+\section{\textbf{ZADANIE 1B}}
+
+W podpunkcie $B$ zadania $1$ mamy naszkicować estymator Fleminga-Harringtona funkcji przeżycia (zmiennej \texttt{time}) w całej badanej grupie i w podgrupach ze względu na płeć, ponownie bez zaznaczonych realizacji przedziałów ufności. \\
+
+\noindent
+Za pomocą funkcji \texttt{survfit} tworzymy prostą krzywą przeżycia estymatora Fleminga-Harringtona, która nie uwzględnia żadnych podgrup.
+
+<<echo = TRUE, eval = TRUE>>=
+fit_overall2 = survfit(Surv(time, status) ~ 1, data = lung,
+                      type = "fleming-harrington")
+print(fit_overall2)
+@
+
+<<echo = TRUE, eval = TRUE, fig.cap = "Estymator FH w całej badanej grupie">>=
+ggsurvplot(fit_overall2, xlab = "Czas przeżycia w dniach",
+           ylab = "Prawdopodobieństwo przeżycia", conf.type = "none",
+           conf.int = FALSE)
+@
+
+<<echo = TRUE, eval = TRUE>>=
+fit_overall3 = survfit(Surv(time, status) ~ sex, data = lung, 
+                       type = "fleming-harrington")
+print(fit_overall3)
+@
+
+<<echo = TRUE, eval = TRUE, fig.cap = "Estymator FH w podgrupach ze względu na płeć">>=
+ggsurvplot(fit_overall3, legend.title = "Płeć", 
+           legend.labs = c("Mężczyzna", "Kobieta"), 
+           xlab = "Czas przeżycia w dniach", 
+           ylab = "Prawdopodobieństwo przeżycia")
+@
+
+<<>>=
+print(fit_overall2)
+@
+
+
+\noindent
+Widzimy, że powyższe wykresy nie różnią się od siebie praktycznie wogóle. 
+
+\section{\textbf{ZADANIE 2}}
+
+Mamy naszkicować wykres estymatora Kaplana-Meiera w funkcji przeżycia w całej badanej grupie oraz podgrupach, ze względu na wartość zmiennej \texttt{ph.ecog} wraz z realizacjmi przedziałów ufności (asymptotycznych punktowo) wybierając różne typy tych przedziałów. Następnie mamy zastanowić się nad wyborem typu przedziału ufności i uzasadanieniem tego wyboru oraz sformułować wnioski wynikające z porównania uzyskanych wykresów w podgrupach ze względu na wartość zmiennej \texttt{ph.ecog}.
+
+<<echo = FALSE, eval = TRUE>>=
+fit_overall7 = survfit(Surv(time, status) ~ 1, data = lung, 
+                       type = "kaplan-meier", conf.type = "log")
+@
+
+<<echo = FALSE, eval = TRUE>>=
+fit_overall8 = survfit(Surv(time, status) ~ 1, data = lung, 
+                       type = "kaplan-meier", conf.type = "log-log")
+@
+
+<<echo = FALSE, eval = TRUE>>=
+fit_overall9 = survfit(Surv(time, status) ~ 1, data = lung, 
+                       type = "kaplan-meier", conf.type = "plain")
+@
+
+<<echo = FALSE, eval = TRUE, results = 'asis'>>=
+type <- c("log", "log - log", "plain")
+n <- c("228", "228", "228")
+events <- c("165", "165", "165")
+median <- c("310", "310", "310")
+LCL <- c("285", "284", "284")
+UCL <- c("363", "361", "361")
+tabela_2 <- data.frame(c(type),
+                       c(n), 
+                       c(events), 
+                       c(median),
+                       c(LCL),
+                       c(UCL))
+
+colnames(tabela_2) <- paste0(c("typ", "n", "events", "median", "0.95 LCL", "0.95 UCL"))
+tab_2 <- xtable(tabela_2, caption = "Zestawienie danych dla całej badanej grupy")
+print(tab_2, type = "latex", table.placement = "H")
+@
+
+\noindent 
+Powyżej zaprezentowana została tabela podająca nam liczbę obserwacji, zdarzeń, medianę przeżycia oraz granice ufności dla mediany. Analizując ją widzimy, że typ przedziału \texttt{log-log} oraz \texttt{plain} zwracają nam te same wartości, dlatego w dalszej analizie będziemy pisać tylko jeden z nich. Różnica przedziału ufności dla typy \texttt{log} wynosi $78$ podczas gdy dla typu \texttt{log - log} jest równa $77$. Ponieważ wiemy, że lepszym przedziałem ufności jest ten krótszy, to mogłoby się wydawać, że typ przedziału \texttt{log - log} jest lepszy od \texttt{log}. Poniżej prezentujemy dwa wykresy estymatora \texttt{Kaplana - Meiera} funkcji przeżycia w~całej badanej grupie. 
+
+<<echo = FALSE, eval = TRUE, fig.width = 8, fig.height = 3>>=
+ggsurvplot(fit_overall7, palette = "#9966CC", legend.title = "log")
+ggsurvplot(fit_overall8, palette = "#915C83", legend.title = "log - log")
+@
+
+<<echo = FALSE, eval = TRUE>>=
+fit_overall4 = survfit(Surv(time, status) ~ ph.ecog, data = lung, 
+                       type = "kaplan-meier", conf.type = "log")
+@
+
+<<echo = FALSE, eval = TRUE>>=
+fit_overall5 = survfit(Surv(time, status) ~ ph.ecog, data = lung, 
+                       type = "kaplan-meier", conf.type = "log-log")
+@
+
+<<echo = FALSE, eval = TRUE>>=
+fit_overall6 = survfit(Surv(time, status) ~ ph.ecog, data = lung, 
+                       type = "kaplan-meier", conf.type = "plain")
+@
+
+\noindent
+Dalej przejdziemy do analizowania funkcji przeżycia w podrgupach ze względu na wartość zmiennej \texttt{ph.ecog}. \\
+
+\begin{itemize}
+\item Dla \texttt{ph.ecog} $= 0$, różnica przedziałów ufności dla typy przedziału \texttt{log} wynosi $228$, podczas gdy dla typu przedziału \texttt{log - log} jest ona równa $218$. 
+\item Dla \texttt{ph.ecog} $= 1$, różnica przedziałów ufności dla typy przedziału \texttt{log} wynosi $161$, podczas gdy dla typu przedziału \texttt{log - log} jest ona równa $181$. 
+\item Dla \texttt{ph.ecog} $= 2$, różnica przedziałów ufności dla typy przedziału \texttt{log} wynosi $132$, podczas gdy dla typu przedziału \texttt{log - log} jest ona równa $132$. 
+\item Dla \texttt{ph.ecog} $= 3$ mamy jednie $1$ obserwację, zatem jest to za mało, żeby wyznaczyć granice przedziałów ufności.
+\end{itemize}
+
+<<echo = FALSE, eval = TRUE, results = 'asis'>>=
+type <- c("log", "log - log", "plain")
+n <- c("63", "63", "63")
+events <- c("37", "37", "37")
+median <- c("394", "394", "394")
+LCL <- c("348", "340", "340")
+UCL <- c("574", "558", "558")
+tabela_3 <- data.frame(c(type),
+                       c(n), 
+                       c(events), 
+                       c(median),
+                       c(LCL),
+                       c(UCL))
+
+colnames(tabela_3) <- paste0(c("typ", "n", "events", "median", "0.95 LCL", "0.95 UCL"))
+tab_3 <- xtable(tabela_3, caption = "Zestawienie danych dla ph.ecog = 0")
+print(tab_3, type = "latex", table.placement = "H")
+@
+
+<<echo = FALSE, eval = TRUE, results = 'asis'>>=
+type <- c("log", "log - log", "plain")
+n <- c("113", "113", "113")
+events <- c("82", "82", "82")
+median <- c("306", "306", "306")
+LCL <- c("268", "245", "245")
+UCL <- c("429", "426", "426")
+tabela_4 <- data.frame(c(type),
+                       c(n), 
+                       c(events), 
+                       c(median),
+                       c(LCL),
+                       c(UCL))
+
+colnames(tabela_4) <- paste0(c("typ", "n", "events", "median", "0.95 LCL", "0.95 UCL"))
+tab_4 <- xtable(tabela_4, caption = "Zestawienie danych dla ph.ecog = 1")
+print(tab_4, type = "latex", table.placement = "H")
+@
+
+<<echo = FALSE, eval = TRUE, results = 'asis'>>=
+type <- c("log", "log - log", "plain")
+n <- c("50", "50", "50")
+events <- c("44", "44", "44")
+median <- c("199", "199", "199")
+LCL <- c("156", "153", "153")
+UCL <- c("288", "285", "285")
+tabela_5 <- data.frame(c(type),
+                       c(n), 
+                       c(events), 
+                       c(median),
+                       c(LCL),
+                       c(UCL))
+
+colnames(tabela_5) <- paste0(c("typ", "n", "events", "median", "0.95 LCL", "0.95 UCL"))
+tab_5 <- xtable(tabela_5, caption = "Zestawienie danych dla ph.ecog = 2")
+print(tab_5, type = "latex", table.placement = "H")
+@
+
+<<echo = FALSE, eval = TRUE, results = 'asis'>>=
+type <- c("log", "log - log", "plain")
+n <- c("1", "1", "1")
+events <- c("1", "1", "1")
+median <- c("118", "118", "118")
+LCL <- c("NA", "NA", "NA")
+UCL <- c("NA", "NA", "NA")
+tabela_6 <- data.frame(c(type),
+                       c(n), 
+                       c(events), 
+                       c(median),
+                       c(LCL),
+                       c(UCL))
+
+colnames(tabela_6) <- paste0(c("typ", "n", "events", "median", "0.95 LCL", "0.95 UCL"))
+tab_6 <- xtable(tabela_6, caption = "Zestawienie danych dla ph.ecog = 3")
+print(tab_6, type = "latex", table.placement = "H")
+@
+
+\noindent
+Czyli ponownie, prawie za każdym razem, mniejsze przedziały ufności wyznacza nam typ przedziału \texttt{log - log}. Poniżej rysujemy wykresy estymatora funkcji \texttt{Kaplana - Meiera} funkcji przeżycia w podgrupach, ze względu na wartość zmiennej \texttt{ph.ecog}.
+
+<<echo = FALSE, eval = TRUE, fig.width = 8, fig.height = 4>>=
+ggsurvplot(fit_overall4, palette = c("#00DDDD", "#8A2BE2", "#DE5D83", "#BD33A4"), conf.int = TRUE)
+ggsurvplot(fit_overall5, palette = c("#DEB887", "#964B00", "#592720", "#CD7F32"), conf.int = TRUE)
+@
+
+\noindent 
+Najbardziej odpowiednim typem przedziału ufności wydaje się być \texttt{log - log}, ponieważ zawęża on nasze pole, zmniejsza wahania i daje dokładniejsze przewidywania. Przyglądając się powyższym wykresom \texttt{KM} widzimy, że typ \texttt{log - log} bardziej przypomina funkcję schodkową, zaś typ \texttt{log} ma większe wahania i szersze zakresy przediwywań. Ponadto widzimy, że pacjenci oznaczeni skalą sprawności \texttt{ECOG} jako $0$ według lekarza, mają znacznie dłuższą krzywą przeżycia niż pozostałe osoby. 
+
+\section{\textbf{ZADANIE 3}}
+
+Zadanie $3$ polega na oszacowaniu punktowym i przedziałowym wartości oczekiwanej i~mediany rozkładu czasu przeżycia w całej badanej grupie i w podgrupach ze względu na wartość zmiennej \texttt{ph.ecog}. \\
+
+\noindent
+Korzystając z funkcji \texttt{survmean} (która oblicza średnie czasy przeżycia w oparciu o oszacowanie przeżycia do pewnego punktu w czasie obserwacji) z biblioteki \texttt{survival} oszacujemy najpierw wartości średniej i~mediany w~całej badanej grupie.
+
+<<echo = FALSE, eval = TRUE>>=
+dane <- lung 
+dane$status[dane$status == 1] <- 0
+dane$status[dane$status == 2] <- 1
+@
+
+<<eval = TRUE, echo = FALSE, warning = FALSE, message = FALSE, results = 'asis'>>=
+model_1 <- survfit(Surv(time,status) ~ 1, data = dane)
+stat <- survival:::survmean(model_1, rmean = 1000)
+mean <- stat$matrix['rmean']
+lower.mean <- mean-stat$matrix[6]
+upper.mean <- mean+stat$matrix[6]
+median <- stat$matrix[7]
+lower.median <- stat$matrix[8]
+upper.median <- stat$matrix[9]
+
+średnia <- c(mean, lower.mean, upper.mean)
+mediana <- c(median, lower.median, upper.median)
+
+nowe.dane <- data.frame(x = c("Oszacowanie punktowowe", "Oszacowanie przedziałowe dolne", "Oszacowanie przedziałowe górne"), średnia, mediana)
+colnames(nowe.dane) <- paste0(c("", "Średnia", "Mediana"))
+tab <- xtable(nowe.dane, caption = "Oszacowanie punktowe i przedziałowe mediany i wartości średniej w całej grupie", digits = 5)
+print(tab, type = "latex", sanitize.text.function = function(x){x}, table.placement = "H", include.rownames = FALSE)
+@
+
+\noindent
+Oraz w podrupach najpierw wartość średniej ze względu na wartość zmiennej \texttt{ph.ecog}. 
+
+<<eval = TRUE, echo = FALSE, warning = FALSE, message = FALSE, results = 'asis'>>=
+model2 <- survfit(Surv(time,status) ~ ph.ecog, data = dane)
+stat <- survival:::survmean(model2, rmean = 1000)
+
+mean.ph0 <- stat$matrix[1,5]
+lower.mean.ph0 <- mean.ph0-stat$matrix[1,6]
+upper.mean.ph0 <- mean.ph0+stat$matrix[1,6]
+median.ph0 <- stat$matrix[1,7]
+lower.median.ph0 <- stat$matrix[1,8]
+upper.median.ph0 <- stat$matrix[1,9]
+
+
+śr.ph0 <- c(mean.ph0, lower.mean.ph0, upper.mean.ph0)
+med.ph0 <- c(median.ph0, lower.median.ph0, upper.median.ph0)
+
+
+mean.ph1 <- stat$matrix[2,5]
+lower.mean.ph1 <- mean.ph1-stat$matrix[2,6]
+upper.mean.ph1 <- mean.ph1+stat$matrix[2,6]
+median.ph1 <- stat$matrix[2,7]
+lower.median.ph1 <- stat$matrix[2,8]
+upper.median.ph1 <- stat$matrix[2,9]
+
+
+śr.ph1 <- c(mean.ph1, lower.mean.ph1, upper.mean.ph1)
+med.ph1 <- c(median.ph1, lower.median.ph1, upper.median.ph1)
+
+mean.ph2 <- stat$matrix[3,5]
+lower.mean.ph2 <- mean.ph2-stat$matrix[3,6]
+upper.mean.ph2 <- mean.ph2+stat$matrix[3,6]
+median.ph2 <- stat$matrix[3,7]
+lower.median.ph2 <- stat$matrix[3,8]
+upper.median.ph2 <- stat$matrix[3,9]
+
+
+śr.ph2 <- c(mean.ph2, lower.mean.ph2, upper.mean.ph2)
+med.ph2 <- c(median.ph2, lower.median.ph2, upper.median.ph2)
+
+mean.ph3 <- stat$matrix[4,5]
+lower.mean.ph3 <- mean.ph3-stat$matrix[4,6]
+upper.mean.ph3 <- mean.ph3+stat$matrix[4,6]
+median.ph3 <- stat$matrix[4,7]
+lower.median.ph3 <- stat$matrix[4,8]
+upper.median.ph3 <- stat$matrix[4,9]
+
+
+śr.ph3 <- c(mean.ph3, lower.mean.ph3, upper.mean.ph3)
+med.ph3 <- c(median.ph3, "NA", "NA")
+
+
+nowe.dane <- data.frame(x = c("Oszacowanie punktowowe", "Oszacowanie przedziałowe dolne", "Oszacowanie przedziałowe górne"), śr.ph0, śr.ph1, śr.ph2, śr.ph3)
+colnames(nowe.dane) <- paste0(c("", "ph.ecog = 0", "ph.ecog = 1", "ph.ecog = 2", "ph.ecog = 3"))
+tab <- xtable(nowe.dane, caption = "Oszacowanie wartości średniej ze względu na wartość zmiennej ph.ecog", digits = 5)
+print(tab, type = "latex", sanitize.text.function = function(x){x}, table.placement = "H", include.rownames = FALSE)
+@
+
+\noindent
+Oraz w podrgupach wartość mediany ze względu na wartość zmiennej \texttt{ph.ecog}. 
+
+<<eval=TRUE, echo=FALSE, warning=FALSE,message=FALSE,results='asis'>>=
+nowe.dane <- data.frame(x = c("Oszacowanie punktowowe", "Oszacowanie przedziałowe dolne", "Oszacowanie przedziałowe górne"), med.ph0, med.ph1, med.ph2, med.ph3)
+colnames(nowe.dane) <- paste0(c("","ph.ecog = 0", "ph.ecog = 1","ph.ecog = 2","ph.ecog = 3"))
+tab <- xtable(nowe.dane, caption = "Oszacowanie wartości mediany ze względu na wartość zmiennej ph.ecog", digits = 5)
+print(tab, type = "latex", sanitize.text.function = function(x){x}, table.placement = "H", include.rownames = FALSE)
+@
+
+\section{\textbf{ZADANIE 4}}
+
+Dalej, w oparciu o realizacje przedziałów ufności, na poziomie ufności $ 1 - \alpha = 0.95$, dla średnich w podgrupach ze względu na wartość zmiennej \texttt{ph.ecog}, mamy sformułować wniosek dotyczący weryfikacji hipotezy o równości średnich w tych podgrupach, na poziomie istotności $\alpha = 0.05$. Wykorzystamy w tym celu funkcję \texttt{survdiff} z biblioteki \texttt{survival}, która testuje, czy istnieje różnica między dwiema lub więcej krzywymi przeżycia. Wartość \texttt{ph.ecog} występuje w $4$ różnych wartościach, zatem otrzymujemy cztery podpopulacje.
+
+<<echo = TRUE, eval = TRUE>>=
+survdiff(Surv(time, status) ~ ph.ecog, data = dane)
+@
+
+<<echo = TRUE, eval = TRUE>>=
+survdiff(Surv(time, status) ~ ph.ecog, rho = 0.1, data = dane)
+@
+
+<<echo = TRUE, eval = TRUE>>=
+survdiff(Surv(time, status) ~ ph.ecog, rho = 0.5, data = dane)
+@
+
+<<echo = TRUE, eval = TRUE>>=
+survdiff(Surv(time, status) ~ ph.ecog, rho = 1, data = dane)
+@
+
+<<echo = FALSE, eval = TRUE, results = 'asis'>>=
+rho <- c("rho = 0", "rho = 0.1", "rho = 0.5", "rho = 1")
+p <- c("p = 7e-05", "p = 5e-05", "p = 3e-05", "p = 3e-05 ")
+tabela_4 <- data.frame(c(rho), 
+                       c(p))
+
+colnames(tabela_4) <- paste0(c("Wartość RHO", "Wartość p"))
+tab_4 <- xtable(tabela_4, caption = "Różne wartości wartości poziomów krytycznych dla różnych wartości RHO")
+print(tab_4, type = "latex", table.placement = "H")
+@
+
+\noindent 
+Widzimy, że dla funkcja \texttt{survdiff} dla różnych wartości $\rho$ daje różne wartości poziomów krytycznych, w~każdym przypadku są one bardzo małe. Na poziomie istotności $\alpha = 0.05$ odrzucamy hipotezę o równości średnich we wskazanych podgrupach ze względu na wartość zmiennej \texttt{ph.ecog}. 
+
+\end{document}

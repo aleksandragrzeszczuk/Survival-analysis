@@ -1,0 +1,332 @@
+\documentclass[12pt, a4paper]{article}
+\usepackage[OT4]{polski}
+\renewcommand{\contentsname}{\Large {\textbf{SPIS TREŚCI}}}
+\usepackage[colorlinks=true, linkcolor=black]{hyperref}
+\usepackage[top = 2.5cm, bottom = 2.5cm, left = 2.5cm, right = 2.5cm]{geometry}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{float}
+\usepackage{graphicx}
+\usepackage{amssymb}
+
+\renewcommand{\maketitle}
+{\begin{titlepage}
+ \vspace*{0.1cm}
+ \begin{center}
+ \large \textbf{ANALIZA PRZEŻYCIA} \\  
+ \end{center}
+ \vspace*{1.3cm}
+ \begin{center}
+ \huge \textsc{\bf SPRAWOZDANIE}
+ \end{center}
+ \vspace*{1.3cm}
+ \vspace*{0.5cm}
+ \begin{center}\small
+ OPRACOWAŁA: \\ \textbf{ALEKSANDRA GRZESZCZUK} \\ \textbf{NUMER ALBUMU: 255707}
+ \end{center} 
+\end{titlepage}}
+
+<<echo = FALSE, eval = TRUE, warning = FALSE, message = FALSE>>=
+library(base)
+library(knitr)
+library(survminer)
+library(survival)
+library(reliaR)
+library(xtable)
+opts_chunk$set(fig.path='figure/', fig.align='center', fig.pos='H', fig.width = 7, fig.height = 4)
+@
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+\newpage
+
+\section{ZADANIE 1}
+
+Zbadamy prawdopodobieństwo przeżycia według płci. Wykorzystamy w tym celu funkcję \texttt{Surv} oraz \texttt{survfit}, które służą do oszacowania przeżycia \texttt{Kaplana - Meiera}. 
+
+<<echo = TRUE, eval = TRUE>>=
+fit_sex <- survfit(Surv(time, status) ~ sex, data = lung, 
+                   type = "kaplan-meier")
+@
+
+Wyniki z funkcji przedstawia poniższa tabela:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{rllllll}
+  \hline
+  & Płeć & Liczba obserwacji & Ilość zdarzeń & Mediana przeżycia & LCL & UCL \\ 
+  \hline
+  1 & Mężczyźni & 138 & 112 & 270 & 212 & 310 \\ 
+  2 & Kobiety & 90 & 53 & 426 & 348 & 550 \\ 
+   \hline
+\end{tabular}
+\caption{Krótkie podsumowanie krzywych przeżycia - opracowanie własne} 
+\end{table}
+
+\noindent
+Mediana przeżycia kobiet jest prawie dwa razy większa niż mediana przeżycia mężczyzn. Sugeruje to, że większa śmiertelność z powodu raka płuc panuje u mężczyzn. \\
+
+\noindent
+Poniższy wykres (narysowany korzystając  z funkcji \texttt{ggsurvplot} z biblioteki \texttt{survminer}) potwierdza wcześniejsze wnioski. Niebieska krzywa będą estymatorem \texttt{KM} kobiet przez cały okres badania jest ponad czerwoną krzywą estymatora \texttt{KM} mężczyzn. To znaczy, że w~całym okresie badania prawdopodobieństwo przeżycia kobiet jest większe. Każde zdarzenie (czyli śmierć pacjenta) jest sygnalizowane pionowym spadkiem krzywej.
+
+<<echo = TRUE, eval = TRUE, fig.cap = "Krzywa Kaplana - Meiera dla zmiennej płci bez przedziałów ufności">>=
+ggsurvplot(fit_sex, legend.title = "Sex",
+           legend.labs = c("Male", "Female"),)
+@
+
+<<echo = TRUE, eval = TRUE, fig.cap = "Krzywa Kaplana - Meiera dla zmiennej płci z przedziałami ufności">>=
+ggsurvplot(fit_sex, conf.int = TRUE, legend.title = "Sex",
+           legend.labs = c("Male", "Female"))
+@
+
+\noindent
+Test \texttt{log - rank} jest dość popularnym testem stosowanym w analizie przeżycia, ponieważ może zostać użyty także w przypadku wystąpienia wartości cenzurowanych. Statystyka tego testu porównuje oszacowania funkcji hazardu dwóch grup w określonym czasie zdarzenia. Zasada stojąca za testem \texttt{log - rank} dla porównania dwóch tablic trwania życia jest prosta - jeżeli nie było różnic między grupami, całkowita liczba zgonów występujących w dowolnym czasie powinna zostać podzielona między dwie grupy w tym czasie. \\
+
+
+\noindent
+Funkcja \texttt{survdiff} testu \texttt{log - rank} testuje, czy istnieje różnica między dwiema (lub więcej) krzywymi przeżycia. Posiada ona parametr $rho$ z przedziału $[0, 1]$, gdzie dla $rho = 0$ \texttt{survdiff} jest zwykłym testem \texttt{log - rank} zaś gdy $rho = 1$ mamy do czynienia z~odpowiednikiem modyfikacji \texttt{Peto~\&~Peto testu Gehana - Wilcoxona}. Na poziomie istotności $\alpha = 0.05$ rozpatrzymy teraz hipotezę zerową, o równości krzywych przeżycia dla obu płci, przeciwko hipotezie alternatywnej mówiącej o~ich nierówności. 
+
+<<echo = TRUE, eval = TRUE>>=
+survdiff(Surv(time, status) ~ sex, data = lung, rho = 0)
+@
+
+<<echo = TRUE, eval = TRUE>>=
+survdiff(Surv(time, status) ~ sex, data = lung, rho = 1)
+@
+
+\noindent
+Widzimy, że dla obydwu testów $p - value < 0.05 = \alpha$, zatem odrzucamy hipotezę zerową mówiącą o równości rozkładów przeżycia ze względu na płeć i przyjmujemy hipotezę alternatywną - przeżycie jest funkcją zależną od płci chorego. Dodatkowo skorzystamy jeszcze z nieparametrycznego testu \texttt{Coxa} (funkcja \texttt{coxph}) (zwanego inaczej modelem proporcjonalnych hazardów).
+
+<<echo = TRUE, eval = TRUE>>=
+coxph(Surv(time, status) ~ sex, data = lung)
+@
+
+\noindent
+Ponownie otrzymaliśmy $p - value = 0.001111 < 0.05 = \alpha$, zatem przyjmujemy hipotezę alternatywną o nierówności rozkładów przeżycia.
+
+\section{ZADANIE 2}
+
+Intuicyjnie mogłoby się wydawać, że wiek pacjenta może być ważnym czynnikiem różnicującym w kontekście umieralności na raka płuc. W naszym zbiorze danych znajduje się zmienna \texttt{age}, oznaczająca wiek w momencie przyjęcia pacjenta do szpitala. Dokonamy teraz kategoryzacji tej zmiennej na $3$ podgrupy:
+
+\begin{itemize}
+    \item pacjenci do $50$ lat
+    \item pacjenci między $50$ a $65$ rokiem życia
+    \item pacjenci po $65$ roku życia. 
+\end{itemize}
+
+<<eval = TRUE, echo = TRUE>>=
+wiek <- cut(lung$age, breaks = c(0, 50, 65, Inf))
+@
+
+\begin{table}[H]
+\centering
+\begin{tabular}{rlr}
+  \hline
+  & Kategoria wiekowa & Liczba \\ 
+  \hline 
+  & 1 - 50 &  26  \\ 
+  & 50 - 65 & 110 \\ 
+  & 65 - 100 &  92  \\ 
+   \hline
+\end{tabular}
+\caption{Kategoryzacja zmiennej wiek} 
+\end{table}
+
+\noindent
+Korzystając z funkcji \texttt{Surv} oraz \texttt{survfit} dokonamy krótkiego podsumowania kategoryzowanej zmiennej wiek a następnie wyznaczymy wykres estymatora \texttt{Kaplana - Meiera} dzięki funkcji \texttt{ggsurvplot}.
+
+<<echo = TRUE, eval = TRUE>>=
+fit_age <- survfit(Surv(time, status) ~ wiek, data = lung, 
+                   type = "kaplan-meier")
+@
+
+\noindent
+Wyniki z funkcji przedstawia poniższa tabela:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{rllllll}
+  \hline
+  Grupa & Przedział & Liczba obserwacji & Ilość zdarzeń & Procentowa wartość & Mediana  \\ 
+  \hline
+  A & $(0, 50]$ & $26$ & $16$ & $61 \%$ & $320$  \\ 
+  B & $[50, 65)$ & $110$ & $76$ & $69 \%$ & $348$  \\ 
+  C & $[65, 100]$ & $92$ & $73$ & $79 \%$ & $301$  \\ 
+   \hline
+\end{tabular}
+\caption{Krótkie podsumowanie kategorii wiekowych - opracowanie własne} 
+\end{table} 
+
+<<echo = TRUE, eval = TRUE, fig.cap = "Krzywa Kaplana - Meiera dla zmiennej kategoryzowanej wiek bez przedziałów ufności">>=
+ggsurvplot(fit_age, legend.title = "Age")
+@
+
+<<echo = TRUE, eval = TRUE, fig.cap = "Krzywa Kaplana - Meiera dla zmiennej kategoryzowanej wiek z przedziałami ufności">>=
+ggsurvplot(fit_age, conf.int = TRUE, legend.title = "Age")
+@
+
+
+\noindent
+Powyżej przedstawiony został estymator funkcji przeżycia \texttt{Kaplana - Meiera} dla pacjentów z rakiem płuc z podziałem na wiek. Widzimy znacznie spadającą funkcję schodkową, co potwierdza nasze wcześniejsze wnioski, że bez względu na wiek pacjenta, szanse na przeżycie są małe. \\
+
+\noindent
+Tak jak w poprzednim zadaniu, skorzystamy z funkcji \texttt{log - rank} dla róznych poziomów wartości \texttt{rho}.
+
+<<echo = TRUE, eval = TRUE>>=
+survdiff(Surv(time, status) ~ wiek, data = lung, rho = 0)
+@
+
+<<echo = TRUE, eval = TRUE>>=
+survdiff(Surv(time, status) ~ wiek, data = lung, rho = 1)
+@
+
+\noindent
+Widzimy, że dla obydwu testów $p - value > 0.05 = \alpha$ zatem przyjmujemy hipotezę zerową mówiącą o równości rozkładów przeżycia dla trzech wybranych przeze mnie kategorii wiekowych. Dodatkowo skorzystamy jeszcze z nieparametrycznego testu \texttt{Coxa} (funkcja \texttt{coxph})(zwanego inaczej modelem proporcjonalnych hazardów).
+
+<<echo = TRUE, eval = TRUE>>=
+coxph(Surv(time, status) ~ wiek, data = lung)
+@
+
+\noindent
+Ponownie otrzymaliśmy $p - value = 0.1974 > 005 = \alpha$, zatem przyjmuejmy hipotezę o~równości przeżycia rozkładów. \\
+
+\noindent
+Analizując powyższe wnioski, otrzymaliśmy, że w momencie zachorowania na raka płuc, właściwie bez względu na wiek, nasze szansze na przeżycie są dość małe. \\
+
+\noindent
+Dokonamy jeszcze innej kategoryzacji zmiennej wiek. 
+
+<<eval = TRUE, echo = TRUE>>=
+wiek1 <- cut(lung$age, breaks = c(0, 20, 40, 60, 80, Inf))
+@
+
+<<echo = TRUE, eval = TRUE>>=
+fit_age1 <- survfit(Surv(time, status) ~ wiek1, data = lung, 
+            type = "kaplan-meier")
+print(fit_age1)
+@
+
+\noindent
+Widzimy, że najwięcej zdarzeń zaszło nam w przedziale wiekowym $(60, 80]$, zaś najmniej w przedziale $(20, 40]$. Jednakże patrząc procentowo, otrzymaliśmy $100 \%$ zdarzeń w ostatnim przedziale wiekowym - osoby od $80$ lat. \\
+
+\noindent
+Rysujemy wykresy estymatora \texttt{Kaplana - Meiera} bez przedziałów ufności oraz z przedziałami. 
+
+<<echo = TRUE, eval = TRUE, fig.cap = "Krzywa Kaplana - Meiera dla zmiennej kategoryzowanej wiek bez przedziałów ufności">>=
+ggsurvplot(fit_age1, legend.title = "Age")
+@
+
+<<echo = TRUE, eval = TRUE, fig.cap = "Krzywa Kaplana - Meiera dla zmiennej kategoryzowanej wiek z przedziałami ufności">>=
+ggsurvplot(fit_age1, conf.int = TRUE, legend.title = "Age")
+@
+
+\noindent
+Oraz korzystając ze wcześniejszych funkcji, sprawdzamy hipotezę zerową mówiącą o równości rozkładów czasu życia w podgupach ze względu na wiek. 
+
+<<echo = TRUE, eval = TRUE>>=
+survdiff(Surv(time, status) ~ wiek1, data = lung, rho = 0)
+@
+
+<<echo = TRUE, eval = TRUE>>=
+survdiff(Surv(time, status) ~ wiek1, data = lung, rho = 1)
+@
+
+\noindent
+W obydwu przypadkach, $p - value = 2e-12 < 0.05 = \alpha$, zatem odrzucamy hipotezę zerową mówiącą o równości rozkładów i przyjmujemy hipotezę alternatywną zakładającą, że przeżycie zależy od wieku. 
+
+<<echo = TRUE, eval = TRUE>>=
+coxph(Surv(time, status) ~ wiek1, data = lung)
+@
+
+\noindent
+Test \texttt{Coxa} również potwierdza nasze przypuszczenia. ($p - vaue = 0.00768 < 0.05 = \alpha$). Wnioskujemy zatem, że rodzaj kategoryzacji zmiennej wiek może mieć wpływ na uzyskiwane przez nas wyniki. 
+
+\section{ZADANIE 3}
+
+\noindent
+Sprawdzimy, czy uwzględnienie zarówno zmiennej płci jak i kategoryzowanej zmiennej wiek, wpływa na hipotezę o równości rozkładów przeżycia, czy też nie. \\
+Dokonujemy krótkiego podsumowania, którego wyniki przedstawia poniższa tabela:
+
+<<echo = TRUE, eval = TRUE>>=
+fit_sex_age <- survfit(Surv(time, status) ~ wiek + sex, data = lung, 
+                   type = "kaplan-meier")
+@
+
+\begin{table}[H]
+\centering
+\begin{tabular}{rllllll}
+  \hline
+  Płeć & Przedział & Liczba obserwacji & Ilość zdarzeń  & Mediana  \\ 
+  \hline
+  Kobiety & $(0, 50]$ & 12 & 6 & 765   \\ 
+  Kobiety & $[50, 65)$ & 49 & 27 & 363  \\ 
+  Kobiety & $[65, 100]$ & 29 & 20 & 444  \\ 
+   \hline
+  Mężczyźni & $(0, 50]$ & 14 & 10 & 320  \\ 
+  Mężczyźni & $[50, 65)$ & 61 & 49 & 286  \\ 
+  Mężczyźni & $[65, 100]$ & 63 & 53 & 267  \\ 
+   \hline
+\end{tabular}
+\caption{Krótkie podsumowanie kategorii wiekowych - opracowanie własne} 
+\end{table} 
+
+<<echo = TRUE, eval = TRUE>>=
+ggsurvplot(fit_sex_age)
+@
+
+<<echo = TRUE, eval = TRUE>>=
+survdiff(Surv(time, status) ~ wiek + sex, data = lung, rho = 0)
+@
+
+<<echo = TRUE, eval = TRUE>>=
+survdiff(Surv(time, status) ~ wiek + sex, data = lung, rho = 1)
+@
+
+\noindent
+Widzimy, że obydwa testy otrzymały $p - value$ mniejszą od poziomu istotności. Odrzucamy zatem hipotezę zerową mówiącą o równości rozkładów czasu przeżycia w tej grupie i przyjmujemy hipotezę alternatywną. To znaczy, że czas życia nie zależy od zmiennej płci połączonej z kategoryzowaną zmienną wiek. 
+
+<<echo = TRUE, eval = TRUE>>=
+coxph(Surv(time, status) ~ wiek + sex, data = lung)
+@
+
+\noindent
+Test \texttt{Coxa} również potwierdza nasze wnioski. \\
+
+Sprawdzimy jeszcze jakie wnioski otrzymaliśmy, nie kategoryzując zmiennej wieku. 
+
+<<echo = TRUE, eval = TRUE>>=
+funkcja1 <- survdiff(Surv(time, status) ~ age + sex, data = lung, rho = 0)
+@
+
+<<echo = TRUE, eval = TRUE>>=
+funkcja2 <- survdiff(Surv(time, status) ~ age + sex, data = lung, rho = 1)
+@
+
+<<echo = TRUE, eval = TRUE>>=
+funkcja3 <- coxph(Surv(time, status) ~ age + sex, data = lung)
+@
+
+\noindent
+Wyniki przedstawia poniższa tabela:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{rllllll}
+  \hline
+  Funkcja & p - value  \\ 
+  \hline
+  1 (log - rank) & 3e-14 \\ 
+  2 (Ghan) & 8e-12  \\ 
+  3 (Cox) & 0.0008574  \\ 
+   \hline
+\end{tabular}
+\caption{Krótkie podsumowanie kategorii wiekowych - opracowanie własne} 
+\end{table} 
+
+\noindent
+W każdym z przypadków $p - value$ jest mniejsza od poziomu istotności $\alpha$, zatem przyjmujemy hipotezę alternatywną. 
+
+\end{document}
